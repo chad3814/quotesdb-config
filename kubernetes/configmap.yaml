@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quotesdb-config
+  namespace: quotesdb
+data:
+  nextauth-url: "https://quotesdb.example.com"
+  node-env: "production"
+  # Database connection will use in-cluster PostgreSQL
+  database-host: "postgres-service.postgres.svc.cluster.local"
+  database-port: "5432"
+  database-name: "quotesdb"

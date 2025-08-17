@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: ../../quotesdb
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../../quotesdb/.env.local
+    environment:
+      - DATABASE_URL=postgresql://quotesdb:localpassword123@db:5432/quotesdb
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      - db
+    networks:
+      - quotesdb-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=quotesdb
+      - POSTGRES_PASSWORD=localpassword123
+      - POSTGRES_DB=quotesdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - quotesdb-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quotesdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+
+networks:
+  quotesdb-network:
+    driver: bridge

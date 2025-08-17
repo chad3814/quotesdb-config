@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quotesdb
+  namespace: quotesdb
+  labels:
+    app: quotesdb
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: quotesdb
+  template:
+    metadata:
+      labels:
+        app: quotesdb
+        version: v1
+    spec:
+      containers:
+      - name: quotesdb
+        image: quotesdb:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-connection
+              key: DATABASE_URL
+        - name: NEXTAUTH_URL
+          valueFrom:
+            configMapKeyRef:
+              name: quotesdb-config
+              key: nextauth-url
+        - name: NEXTAUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-secrets
+              key: nextauth-secret
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-oauth
+              key: google-client-id
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-oauth
+              key: google-client-secret
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-oauth
+              key: github-client-id
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-oauth
+              key: github-client-secret
+        - name: APPLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-oauth
+              key: apple-client-id
+        - name: APPLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-oauth
+              key: apple-client-secret
+        - name: TMDB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: quotesdb-secrets
+              key: tmdb-api-key
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      imagePullSecrets:
+      - name: docker-registry-secret

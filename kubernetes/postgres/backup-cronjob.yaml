@@ -1,0 +1,113 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: postgres
+  labels:
+    app: postgres
+    component: backup
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: postgres-backup
+            image: postgres:16-alpine
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Starting backup at $(date)"
+              
+              # Create backup filename with timestamp
+              BACKUP_FILE="/backup/quotesdb-$(date +%Y%m%d-%H%M%S).sql.gz"
+              
+              # Perform backup
+              PGPASSWORD=$POSTGRES_PASSWORD pg_dump \
+                -h postgres-service \
+                -U $POSTGRES_USER \
+                -d $POSTGRES_DB \
+                --verbose \
+                --no-owner \
+                --no-acl \
+                --clean \
+                --if-exists \
+                | gzip > $BACKUP_FILE
+              
+              echo "Backup completed: $BACKUP_FILE"
+              
+              # Upload to S3 if configured
+              if [ -n "$S3_BACKUP_BUCKET" ]; then
+                echo "Uploading to S3..."
+                aws s3 cp $BACKUP_FILE s3://$S3_BACKUP_BUCKET/postgres-backups/
+                echo "Upload completed"
+              fi
+              
+              # Clean up old local backups (keep last 7 days)
+              find /backup -name "quotesdb-*.sql.gz" -mtime +7 -delete
+              
+              echo "Backup job completed successfully"
+            env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: S3_BACKUP_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-backup-config
+                  key: S3_BACKUP_BUCKET
+                  optional: true
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: postgres-backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backup-pvc
+  namespace: postgres
+  labels:
+    app: postgres
+    component: backup
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: postgres-storage
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-backup-config
+  namespace: postgres
+  labels:
+    app: postgres
+    component: backup
+data:
+  # Uncomment and set to enable S3 backups
+  # S3_BACKUP_BUCKET: "your-backup-bucket-name"
